@@ -11,6 +11,7 @@ from fastvideo.configs.pipelines.stepvideo import StepVideoT2VConfig
 from fastvideo.configs.pipelines.wan import (SelfForcingWanT2V480PConfig,
                                              WanI2V480PConfig, WanI2V720PConfig,
                                              WanT2V480PConfig, WanT2V720PConfig)
+from fastvideo.configs.pipelines.lingbotworld import LingbotWorldT2VBaseConfig
 
 __all__ = [
     "HunyuanConfig", "FastHunyuanConfig", "PipelineConfig",
@@ -18,5 +19,5 @@ __all__ = [
     "WanT2V480PConfig", "WanI2V480PConfig", "WanT2V720PConfig",
     "WanI2V720PConfig", "StepVideoT2VConfig", "SelfForcingWanT2V480PConfig",
     "CosmosConfig", "Cosmos25Config", "LTX2T2VConfig", "HYWorldConfig",
-    "get_pipeline_config_cls_from_name"
+    "get_pipeline_config_cls_from_name", "LingbotWorldT2VBaseConfig"
 ]

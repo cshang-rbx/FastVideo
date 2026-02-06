@@ -28,7 +28,7 @@ from einops import rearrange
 os.environ["MASTER_ADDR"] = "localhost"
 os.environ["MASTER_PORT"] = "29504"
 
-from fastvideo.configs.pipelines.wan import Wan2_2_I2V_A14B_Config
+from fastvideo.configs.pipelines.lingbotworld import LingbotWorldT2VBaseConfig
 from fastvideo.fastvideo_args import FastVideoArgs, ExecutionMode
 from fastvideo.logger import init_logger
 from fastvideo.pipelines import build_pipeline
@@ -42,11 +42,12 @@ logger = init_logger(__name__)
 # ============================================================================
 
 # HuggingFace model ID (Diffusers format)
-MODEL_ID = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
+MODEL_ID = "/home/builder/dev/data/lingbot-world-base-cam"
 
 # Local directory to cache the model
 # set default path to ~/dev/Wan-AI/Wan2.2-I2V-A14B-Diffusers
-LOCAL_DIR = os.path.join(os.path.expanduser("~"), "dev", MODEL_ID.replace("/", "-"))
+# LOCAL_DIR = os.path.join(os.path.expanduser("~"), "dev", MODEL_ID.replace("/", "-"))
+LOCAL_DIR = "/home/builder/dev/data/lingbot-world-base-cam"
 
 # Output directory for generated videos
 OUTPUT_DIR = "video_samples_wan2_2_14B_i2v"
@@ -168,10 +169,11 @@ def load_pipeline():
     logger.info("Model path: %s", model_path)
     
     # Create the I2V pipeline config
-    pipeline_config = Wan2_2_I2V_A14B_Config()
+    pipeline_config = LingbotWorldT2VBaseConfig()
     logger.info("Pipeline config: %s", pipeline_config.__class__.__name__)
     logger.info("  - boundary_ratio: %s", pipeline_config.boundary_ratio)
     logger.info("  - flow_shift: %s", pipeline_config.flow_shift)
+    print("pipeline_config: %s", pipeline_config)
     
     # Create FastVideo args
     fastvideo_args = FastVideoArgs(
@@ -345,6 +347,15 @@ def generate_video(
     # Run inference through the pipeline
     logger.info("\nRunning inference...")
     start_time = time.perf_counter()
+
+    print("+" * 70)
+    print("pipeline.modules.keys()")
+    print(pipeline.modules.keys())
+    if "transformer" in pipeline.modules:
+        print(f"{type(pipeline.modules['transformer'])}")
+    if "transformer_2" in pipeline.modules:
+        print(f"type(pipeline.modules['transformer_2']): {type(pipeline.modules['transformer_2'])}")
+    print("+" * 70)
     
     output_batch = pipeline.forward(batch, fastvideo_args)
     

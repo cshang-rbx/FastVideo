@@ -42,6 +42,7 @@ _TEXT_TO_VIDEO_DIT_MODELS = {
 _IMAGE_TO_VIDEO_DIT_MODELS = {
     # "HunyuanVideoTransformer3DModel": ("dits", "hunyuanvideo", "HunyuanVideoDiT"),
     "WanTransformer3DModel": ("dits", "wanvideo", "WanTransformer3DModel"),
+    "LingbotWorldTransformer3DModel": ("dits", "lingbotworld", "LingbotWorldTransformer3DModel"),
     "CausalWanTransformer3DModel": ("dits", "causal_wanvideo", "CausalWanTransformer3DModel"),
     "MatrixGameWanModel": ("dits", "matrixgame", "MatrixGameWanModel"),
     "CausalMatrixGameWanModel": ("dits", "matrixgame", "CausalMatrixGameWanModel"),

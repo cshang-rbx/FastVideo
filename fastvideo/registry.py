@@ -25,6 +25,7 @@ from fastvideo.configs.pipelines.hyworld import HYWorldConfig
 from fastvideo.configs.pipelines.longcat import LongCatT2V480PConfig
 from fastvideo.configs.pipelines.ltx2 import LTX2T2VConfig
 from fastvideo.configs.pipelines.stepvideo import StepVideoT2VConfig
+from fastvideo.configs.pipelines.lingbotworld import LingbotWorldT2VBaseConfig
 from fastvideo.configs.pipelines.turbodiffusion import (
     TurboDiffusionI2V_A14B_Config,
     TurboDiffusionT2V_14B_Config,
@@ -339,6 +340,21 @@ def _register_configs() -> None:
             lambda path: "longcatimagetovideo" in path.lower(),
             lambda path: "longcatvideocontinuation" in path.lower(),
             lambda path: "longcat" in path.lower(),
+        ],
+    )
+
+    # LongCat
+    register_configs(
+        sampling_param_cls=None,
+        pipeline_config_cls=LingbotWorldT2VBaseConfig,
+        hf_model_paths=[
+            "",
+        ],
+        model_detectors=[
+            lambda path: "lingbotworld" in path.lower(),
+            lambda path: "lingbot-world" in path.lower(),
+            lambda path: "lingbot-world-base" in path.lower(),
+            lambda path: "lingbot-world-base-cam" in path.lower(),
         ],
     )
 

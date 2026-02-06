@@ -156,7 +156,6 @@ class Wan2_2_T2V_A14B_Config(WanT2V480PConfig):
     def __post_init__(self) -> None:
         self.dit_config.boundary_ratio = self.boundary_ratio
 
-
 @dataclass
 class Wan2_2_I2V_A14B_Config(WanI2V480PConfig):
     flow_shift: float | None = 5.0
