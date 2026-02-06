@@ -45,7 +45,8 @@ logger = init_logger(__name__)
 MODEL_ID = "Wan-AI/Wan2.2-I2V-A14B-Diffusers"
 
 # Local directory to cache the model
-LOCAL_DIR = os.path.join("data", MODEL_ID.replace("/", "-"))
+# set default path to ~/data/Wan-AI/Wan2.2-I2V-A14B-Diffusers
+LOCAL_DIR = os.path.join(os.path.expanduser("~"), "data", MODEL_ID.replace("/", "-"))
 
 # Output directory for generated videos
 OUTPUT_DIR = "video_samples_wan2_2_14B_i2v"
