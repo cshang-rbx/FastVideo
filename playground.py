@@ -42,12 +42,11 @@ logger = init_logger(__name__)
 # ============================================================================
 
 # HuggingFace model ID (Diffusers format)
-MODEL_ID = "/home/builder/dev/data/lingbot-world-base-cam"
+# s5cmd cp s3://3dfm-videogen/models/fastvideo-lingbot-world-base-cam/\* fastvideo-lingbot-world-base-cam/
+MODEL_ID = "fastvideo-lingbot-world-base-cam/"
 
 # Local directory to cache the model
-# set default path to ~/dev/Wan-AI/Wan2.2-I2V-A14B-Diffusers
-# LOCAL_DIR = os.path.join(os.path.expanduser("~"), "dev", MODEL_ID.replace("/", "-"))
-LOCAL_DIR = "/home/builder/dev/data/lingbot-world-base-cam"
+LOCAL_DIR = "fastvideo-lingbot-world-base-cam/"
 
 # Output directory for generated videos
 OUTPUT_DIR = "video_samples_wan2_2_14B_i2v"
