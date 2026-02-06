@@ -441,11 +441,11 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Seed")
 
     # Dummy training args
-    parser.add_argument("--train-height", type=int, default=64, help="Dummy train height")
-    parser.add_argument("--train-width", type=int, default=64, help="Dummy train width")
-    parser.add_argument("--train-frames", type=int, default=9, help="Dummy train frames")
+    parser.add_argument("--train-height", type=int, default=480, help="Dummy train height")
+    parser.add_argument("--train-width", type=int, default=832, help="Dummy train width")
+    parser.add_argument("--train-frames", type=int, default=121, help="Dummy train frames")
     parser.add_argument("--train-batch-size", type=int, default=1, help="Dummy train batch size")
-    parser.add_argument("--image-token-len", type=int, default=1, help="Dummy image token length")
+    parser.add_argument("--image-token-len", type=int, default=512, help="Dummy image token length")
 
     # Parallel settings
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
@@ -486,14 +486,15 @@ def main():
             width=args.train_width,
             train_batch_size=args.train_batch_size,
         )
-        training_batch = minimal_dummy_train_step(
-            pipeline=training_pipeline,
-            training_args=training_args,
-            batch_size=args.train_batch_size,
-            image_token_len=args.image_token_len,
-            do_optimizer_step=True,
-        )
-        logger.info("Dummy training step loss: %.6f", training_batch.total_loss or 0.0)
+        for _ in range(100):
+            training_batch = minimal_dummy_train_step(
+                pipeline=training_pipeline,
+                training_args=training_args,
+                batch_size=args.train_batch_size,
+                image_token_len=args.image_token_len,
+                do_optimizer_step=True,
+            )
+            logger.info("Dummy training step loss: %.6f", training_batch.total_loss or 0.0)
 
 
 if __name__ == "__main__":
