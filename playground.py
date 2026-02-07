@@ -275,6 +275,217 @@ def load_pipeline(
     return pipeline, fastvideo_args
 
 
+def draw_camera_joystick_on_frames(
+    frames: list[np.ndarray],
+    poses_path: str,
+    num_video_frames: int,
+) -> list[np.ndarray]:
+    """Draw a joystick-style camera motion indicator on each video frame.
+
+    Overlays two widgets:
+
+    * **Bottom-right – Joystick**: shows per-frame camera translation
+      direction in camera-local coordinates (right/left ↔ x, forward/back ↔ y
+      on screen).  A bright dot + line from centre indicates direction and
+      magnitude.
+
+    * **Bottom-left – Trajectory minimap**: top-down (world XZ) view of the
+      full camera path.  The traversed portion is highlighted and a heading
+      arrow shows which way the camera is facing.
+
+    Args:
+        frames: List of ``(H, W, 3)`` uint8 numpy frames.
+        poses_path: Path to ``poses.npy`` — ``(N, 4, 4)`` c2w matrices
+            (OpenCV convention).
+        num_video_frames: Number of video frames (poses are truncated /
+            repeated to match).
+
+    Returns:
+        New list of frames with the overlay drawn.
+    """
+    from PIL import Image, ImageDraw, ImageFont
+
+    # ------------------------------------------------------------------
+    # Load & align poses to video frames
+    # ------------------------------------------------------------------
+    c2ws = np.load(poses_path).astype(np.float64)  # (N, 4, 4)
+    n_poses = len(c2ws)
+
+    # Build a pose index for every video frame (clamp if poses < frames)
+    pose_indices = np.linspace(0, n_poses - 1, num_video_frames)
+    pose_indices = np.clip(np.round(pose_indices).astype(int), 0, n_poses - 1)
+
+    positions = c2ws[:, :3, 3]       # (N, 3)
+    rotations = c2ws[:, :3, :3]      # (N, 3, 3)
+
+    # ------------------------------------------------------------------
+    # Per-frame camera-local translation (for joystick)
+    # ------------------------------------------------------------------
+    local_deltas = np.zeros((n_poses, 3))
+    for i in range(1, n_poses):
+        world_delta = positions[i] - positions[i - 1]
+        # World → camera-local: R^T @ Δp
+        local_deltas[i] = rotations[i].T @ world_delta
+
+    # OpenCV camera: x=right, y=down, z=forward
+    # Joystick mapping: screen_x = local_x (right), screen_y = -local_z (forward → up)
+    joy_vecs = np.stack([local_deltas[:, 0], -local_deltas[:, 2]], axis=-1)  # (N, 2)
+
+    max_mag = np.max(np.linalg.norm(joy_vecs, axis=-1))
+    if max_mag > 1e-8:
+        joy_vecs_norm = joy_vecs / max_mag  # in [-1, 1]
+    else:
+        joy_vecs_norm = np.zeros_like(joy_vecs)
+
+    # ------------------------------------------------------------------
+    # Trajectory minimap (world XZ top-down)
+    # ------------------------------------------------------------------
+    traj_xz = positions[:, [0, 2]]  # world X, Z
+    traj_range = max(np.ptp(traj_xz, axis=0).max(), 1e-8)
+    traj_center = (traj_xz.min(axis=0) + traj_xz.max(axis=0)) / 2.0
+    traj_norm = (traj_xz - traj_center) / (traj_range * 0.6)  # normalised with margin
+
+    # Camera forward direction projected onto XZ (for heading arrow)
+    cam_fwd_world = rotations[:, :3, 2]   # z-column of R = forward in world
+    cam_fwd_xz = cam_fwd_world[:, [0, 2]]
+    fwd_len = np.linalg.norm(cam_fwd_xz, axis=-1, keepdims=True)
+    fwd_len = np.where(fwd_len < 1e-8, 1.0, fwd_len)
+    cam_fwd_xz = cam_fwd_xz / fwd_len
+
+    # ------------------------------------------------------------------
+    # Drawing parameters
+    # ------------------------------------------------------------------
+    H, W = frames[0].shape[:2]
+    radius = max(min(H, W) // 10, 30)
+    pad = 16
+
+    joy_cx = W - radius - pad          # joystick centre (bottom-right)
+    joy_cy = H - radius - pad
+    map_cx = radius + pad               # minimap centre (bottom-left)
+    map_cy = H - radius - pad
+
+    # Colours (RGBA)
+    BG       = (0, 0, 0, 110)
+    RING     = (220, 220, 220, 180)
+    CROSS    = (255, 255, 255, 45)
+    JOY_LINE = (0, 190, 255, 200)
+    JOY_DOT  = (0, 210, 255, 255)
+    TRAJ_DIM = (120, 120, 120, 80)
+    TRAJ_LIT = (0, 190, 255)
+    POS_DOT  = (255, 70, 70, 255)
+    START_DOT = (0, 230, 80, 220)
+    HEADING  = (255, 200, 60, 220)
+
+    # ------------------------------------------------------------------
+    # Try to load a small font for labels (fall back to default)
+    # ------------------------------------------------------------------
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 11)
+    except Exception:
+        font = ImageFont.load_default()
+
+    # ------------------------------------------------------------------
+    # Render each frame
+    # ------------------------------------------------------------------
+    result_frames: list[np.ndarray] = []
+    for fi, frame in enumerate(frames):
+        img = Image.fromarray(frame)
+        draw = ImageDraw.Draw(img, "RGBA")
+        pi = pose_indices[min(fi, len(pose_indices) - 1)]
+
+        # ============== Joystick (bottom-right) ==============
+        # Background
+        draw.ellipse(
+            [joy_cx - radius, joy_cy - radius, joy_cx + radius, joy_cy + radius],
+            fill=BG, outline=RING, width=2,
+        )
+        # Crosshairs
+        cr = radius - 6
+        draw.line([(joy_cx - cr, joy_cy), (joy_cx + cr, joy_cy)], fill=CROSS, width=1)
+        draw.line([(joy_cx, joy_cy - cr), (joy_cx, joy_cy + cr)], fill=CROSS, width=1)
+        # Centre dot (rest position)
+        draw.ellipse(
+            [joy_cx - 2, joy_cy - 2, joy_cx + 2, joy_cy + 2],
+            fill=(255, 255, 255, 60),
+        )
+
+        # Joystick knob
+        jv = joy_vecs_norm[pi]
+        knob_x = joy_cx + jv[0] * (radius - 10)
+        knob_y = joy_cy + jv[1] * (radius - 10)  # already flipped (forward = -screen_y)
+        # Line from centre to knob
+        draw.line([(joy_cx, joy_cy), (knob_x, knob_y)], fill=JOY_LINE, width=3)
+        # Knob dot
+        kr = 7
+        draw.ellipse(
+            [knob_x - kr, knob_y - kr, knob_x + kr, knob_y + kr],
+            fill=JOY_DOT, outline=(255, 255, 255, 255), width=1,
+        )
+        # Label
+        draw.text((joy_cx - radius, joy_cy - radius - 15), "CAM", fill=(255, 255, 255, 180), font=font)
+
+        # ============== Trajectory minimap (bottom-left) ==============
+        draw.ellipse(
+            [map_cx - radius, map_cy - radius, map_cx + radius, map_cy + radius],
+            fill=BG, outline=RING, width=2,
+        )
+
+        def _map_pt(idx):
+            """Map pose index to minimap pixel coords."""
+            mx = map_cx + traj_norm[idx, 0] * (radius - 6)
+            # world Z → screen y (negate so +Z = up on screen)
+            my = map_cy - traj_norm[idx, 1] * (radius - 6)
+            return mx, my
+
+        # Full trajectory (dimmed)
+        for j in range(1, n_poses):
+            x1, y1 = _map_pt(j - 1)
+            x2, y2 = _map_pt(j)
+            draw.line([(x1, y1), (x2, y2)], fill=TRAJ_DIM, width=1)
+
+        # Traversed trajectory (bright, alpha ramp)
+        if pi > 0:
+            for j in range(1, pi + 1):
+                alpha = int(80 + 175 * j / max(pi, 1))
+                x1, y1 = _map_pt(j - 1)
+                x2, y2 = _map_pt(j)
+                draw.line([(x1, y1), (x2, y2)], fill=(*TRAJ_LIT, alpha), width=2)
+
+        # Start marker
+        sx, sy = _map_pt(0)
+        draw.ellipse([sx - 4, sy - 4, sx + 4, sy + 4], fill=START_DOT)
+
+        # Current position + heading arrow
+        cx, cy = _map_pt(pi)
+        draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=POS_DOT, outline=(255, 255, 255, 255), width=1)
+        # Heading arrow (camera forward direction on XZ plane)
+        arrow_len = radius * 0.18
+        ax = cx + cam_fwd_xz[pi, 0] * arrow_len
+        ay = cy - cam_fwd_xz[pi, 1] * arrow_len  # negate Z for screen
+        draw.line([(cx, cy), (ax, ay)], fill=HEADING, width=2)
+        # Arrowhead
+        dx, dy = ax - cx, ay - cy
+        perp_x, perp_y = -dy * 0.4, dx * 0.4
+        draw.polygon(
+            [(ax, ay), (ax - dx * 0.35 + perp_x, ay - dy * 0.35 + perp_y),
+             (ax - dx * 0.35 - perp_x, ay - dy * 0.35 - perp_y)],
+            fill=HEADING,
+        )
+
+        # Label
+        draw.text((map_cx - radius, map_cy - radius - 15), "PATH", fill=(255, 255, 255, 180), font=font)
+        # Frame counter
+        draw.text(
+            (map_cx - radius, map_cy + radius + 4),
+            f"f {fi+1}/{len(frames)}",
+            fill=(180, 180, 180, 160), font=font,
+        )
+
+        result_frames.append(np.array(img.convert("RGB")))
+
+    return result_frames
+
+
 def generate_video(
     pipeline,
     fastvideo_args: FastVideoArgs,
@@ -318,7 +529,7 @@ def generate_video(
         image_path = EXAMPLE_IMAGE
     if output_path is None:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        output_path = os.path.join(OUTPUT_DIR, f"generated_seed{seed}.mp4")
+        output_path = os.path.join(OUTPUT_DIR, f"generated_seed{seed}_{time.strftime('%Y%m%d_%H%M%S')}.mp4")
     
     logger.info("=" * 70)
     logger.info("Wan2.2-I2V-A14B Video Generation")
@@ -407,6 +618,15 @@ def generate_video(
             x = x.transpose(0, 1).transpose(1, 2).squeeze(-1)
             frames.append((x * 255).numpy().astype(np.uint8))
         
+        # Overlay camera joystick if camera data was provided
+        if action_path is not None:
+            poses_file = os.path.join(action_path, "poses.npy")
+            if os.path.isfile(poses_file):
+                logger.info("Drawing camera joystick overlay...")
+                frames = draw_camera_joystick_on_frames(
+                    frames, poses_file, num_frames)
+                logger.info("Camera overlay applied to %d frames", len(frames))
+
         # Save video
         if batch.save_video:
             imageio.mimsave(output_path, frames, fps=batch.fps, format="mp4")
@@ -569,13 +789,13 @@ python playground.py --generate \
 
 # 2-GPU sequence parallel:
 torchrun --nproc_per_node=2 playground.py --generate \
-    --num_gpus 2 --sp_size 2 --hsdp_shard_dim 1 --hsdp_replicate_dim 1 \
+    --num_gpus 2 --sp_size 2 --hsdp_shard_dim 2 --hsdp_replicate_dim 1 \
     --prompt "The video presents a soaring journey through a fantasy jungle. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate. The ancient gothic castle approaches steadily, its stone details becoming clearer against the backdrop of floating islands and distant waterfalls." \
     --image "assets/lingbot/image.jpg" \
     --action_path "assets/lingbot/" \
     --height 480 --width 832 \
-    --num_frames 241 --steps 40 \
-    --guidance_scale 5.0 --seed 6 2>&1 | tee lingbot_sp2.log
+    --num_frames 481 --steps 40 \
+    --guidance_scale 5.0 --seed 8 2>&1 | tee lingbot_sp2.log
 
 # 4-GPU HSDP (2-way FSDP shard x 2-way replication):
 torchrun --nproc_per_node=4 playground.py --generate \
