@@ -49,7 +49,7 @@ MODEL_ID = "fastvideo-lingbot-world-base-cam/"
 LOCAL_DIR = "fastvideo-lingbot-world-base-cam/"
 
 # Output directory for generated videos
-OUTPUT_DIR = "video_samples_wan2_2_14B_i2v"
+OUTPUT_DIR = "video_samples_fastvideo-lingbot-world-base-cam"
 
 # Example prompts and images (from Wan2.2 official examples)
 EXAMPLE_PROMPT = (
@@ -159,7 +159,7 @@ def load_pipeline():
         tuple: (pipeline, fastvideo_args)
     """
     logger.info("=" * 70)
-    logger.info("Loading Wan2.2-I2V-A14B MoE Pipeline")
+    logger.info("Loading LingbotWorld T2V Base Pipeline")
     logger.info("=" * 70)
     
     # Download model

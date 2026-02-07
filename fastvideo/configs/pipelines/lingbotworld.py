@@ -6,7 +6,7 @@ import torch
 
 from fastvideo.configs.models.dits import LingbotWorldConfig
 from fastvideo.configs.models import DiTConfig, VAEConfig
-
+from typing import Any
 from fastvideo.configs.models.vaes import WanVAEConfig
 from fastvideo.configs.pipelines.wan import Wan2_2_I2V_A14B_Config
 
@@ -21,6 +21,8 @@ class LingbotWorldT2VBaseConfig(Wan2_2_I2V_A14B_Config):
     dit_config: DiTConfig = field(default_factory=LingbotWorldConfig)
     # VAE
     vae_config: VAEConfig = field(default_factory=WanVAEConfig)
+
+    image_encoder_config: Any = None
 
     def __post_init__(self):
         super().__post_init__()
