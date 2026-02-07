@@ -561,28 +561,28 @@ if __name__ == "__main__":
 # Single GPU:
 python playground.py --generate \
     --prompt "A dragon flying to a tower" \
-    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
-    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --image "assets/lingbot/image.jpg" \
+    --action_path "assets/lingbot/" \
     --height 480 --width 832 \
     --num_frames 81 --steps 40 \
     --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot.log
 
 # 2-GPU sequence parallel:
 torchrun --nproc_per_node=2 playground.py --generate \
-    --num_gpus 2 --sp_size 2 --hsdp_shard_dim 2 --hsdp_replicate_dim 1 \
-    --prompt "A dragon flying to a tower" \
-    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
-    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --num_gpus 2 --sp_size 2 --hsdp_shard_dim 1 --hsdp_replicate_dim 1 \
+    --prompt "The video presents a soaring journey through a fantasy jungle. The wind whips past the rider's blue hands gripping the reins, causing the leather straps to vibrate. The ancient gothic castle approaches steadily, its stone details becoming clearer against the backdrop of floating islands and distant waterfalls." \
+    --image "assets/lingbot/image.jpg" \
+    --action_path "assets/lingbot/" \
     --height 480 --width 832 \
-    --num_frames 81 --steps 40 \
-    --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot_sp2.log
+    --num_frames 241 --steps 40 \
+    --guidance_scale 5.0 --seed 6 2>&1 | tee lingbot_sp2.log
 
 # 4-GPU HSDP (2-way FSDP shard x 2-way replication):
 torchrun --nproc_per_node=4 playground.py --generate \
     --num_gpus 4 --sp_size 2 --hsdp_shard_dim 2 --hsdp_replicate_dim 2 \
     --prompt "A dragon flying to a tower" \
-    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
-    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --image "assets/lingbot/image.jpg" \
+    --action_path "assets/lingbot/" \
     --height 480 --width 832 \
     --num_frames 81 --steps 40 \
     --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot_hsdp4.log
