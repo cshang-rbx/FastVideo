@@ -24,9 +24,10 @@ import torch
 import torchvision
 from einops import rearrange
 
-# Set distributed environment variables (required even for single GPU)
-os.environ["MASTER_ADDR"] = "localhost"
-os.environ["MASTER_PORT"] = "29504"
+# Set distributed environment variables (defaults for single GPU;
+# torchrun sets these automatically for multi-GPU)
+os.environ.setdefault("MASTER_ADDR", "localhost")
+os.environ.setdefault("MASTER_PORT", "29504")
 
 from fastvideo.configs.pipelines.lingbotworld import LingbotWorldT2VBaseConfig
 from fastvideo.fastvideo_args import FastVideoArgs, ExecutionMode
@@ -43,10 +44,10 @@ logger = init_logger(__name__)
 
 # HuggingFace model ID (Diffusers format)
 # s5cmd cp s3://3dfm-videogen/models/fastvideo-lingbot-world-base-cam/\* fastvideo-lingbot-world-base-cam/
-MODEL_ID = "fastvideo-lingbot-world-base-cam/"
+MODEL_ID = "/home/builder/workspace/weights/fastvideo-lingbot-world-base-cam"
 
 # Local directory to cache the model
-LOCAL_DIR = "fastvideo-lingbot-world-base-cam/"
+LOCAL_DIR = "/home/builder/workspace/weights/fastvideo-lingbot-world-base-cam"
 
 # Output directory for generated videos
 OUTPUT_DIR = "video_samples_fastvideo-lingbot-world-base-cam"
@@ -145,7 +146,13 @@ def count_checkpoint_params(model_dir: str) -> int | None:
     return total_params
 
 
-def load_pipeline():
+def load_pipeline(
+    num_gpus: int = 1,
+    tp_size: int = 1,
+    sp_size: int = 1,
+    hsdp_shard_dim: int = 1,
+    hsdp_replicate_dim: int = 1,
+):
     """
     Load the full MoE I2V pipeline with both transformers.
     
@@ -155,12 +162,21 @@ def load_pipeline():
     - text_encoder: UMT5-XXL for text encoding
     - vae: AutoencoderKLWan for encoding/decoding
     
+    Args:
+        num_gpus: Total number of GPUs to use (default: 1)
+        tp_size: Tensor parallelism size (default: 1)
+        sp_size: Sequence parallelism size (default: 1, set >1 for SP)
+        hsdp_shard_dim: FSDP shard dimension for HSDP (default: 1)
+        hsdp_replicate_dim: HSDP replication dimension (default: 1)
+
     Returns:
         tuple: (pipeline, fastvideo_args)
     """
     logger.info("=" * 70)
     logger.info("Loading LingbotWorld T2V Base Pipeline")
     logger.info("=" * 70)
+    logger.info("Parallelism: num_gpus=%d, tp=%d, sp=%d, hsdp_shard=%d, hsdp_rep=%d",
+                num_gpus, tp_size, sp_size, hsdp_shard_dim, hsdp_replicate_dim)
     
     # Download model
     logger.info("Downloading/loading model from: %s", MODEL_ID)
@@ -177,15 +193,18 @@ def load_pipeline():
     # Create FastVideo args
     fastvideo_args = FastVideoArgs(
         model_path=model_path,
-        num_gpus=1,
-        tp_size=1,
-        sp_size=1,
-        hsdp_shard_dim=1,
-        hsdp_replicate_dim=1,
+        num_gpus=num_gpus,
+        tp_size=tp_size,
+        sp_size=sp_size,
+        hsdp_shard_dim=hsdp_shard_dim,
+        hsdp_replicate_dim=hsdp_replicate_dim,
         dit_cpu_offload=False,
         text_encoder_cpu_offload=True,
         vae_cpu_offload=False,
         pipeline_config=pipeline_config,
+        # The model_index.json has _class_name="WanImageToVideoPipeline",
+        # but we want the LingbotWorld pipeline which adds camera conditioning.
+        override_pipeline_cls_name="LingbotWorldI2VPipeline",
     )
     
     # Build pipeline - this loads all modules
@@ -262,6 +281,7 @@ def generate_video(
     prompt: str = None,
     image_path: str = None,
     output_path: str = None,
+    action_path: str = None,
     height: int = 480,
     width: int = 832,
     num_frames: int = 81,
@@ -325,6 +345,17 @@ def generate_video(
     logger.info("  - num_latent_frames: %d", num_latent_frames)
     logger.info("  - n_tokens: %d", n_tokens)
     
+    # Build extra dict for camera conditioning (if action_path provided)
+    extra = {}
+    if action_path is not None:
+        extra["poses_path"] = os.path.join(action_path, "poses.npy")
+        extra["intrinsics_path"] = os.path.join(action_path, "intrinsics.npy")
+        # If the intrinsics were calibrated for a different resolution than
+        # 480×832, override here:
+        # extra["original_height"] = 480
+        # extra["original_width"] = 832
+        logger.info("Camera conditioning enabled from: %s", action_path)
+
     # Create ForwardBatch for the pipeline
     batch = ForwardBatch(
         data_type="video",
@@ -341,6 +372,7 @@ def generate_video(
         output_path=output_path,
         save_video=True,
         fps=16,
+        extra=extra,
     )
     
     # Run inference through the pipeline
@@ -419,6 +451,12 @@ def main():
         help="Output path for generated video"
     )
     parser.add_argument(
+        "--action_path",
+        type=str,
+        default=None,
+        help="Path to directory containing poses.npy and intrinsics.npy for camera conditioning"
+    )
+    parser.add_argument(
         "--height",
         type=int,
         default=480,
@@ -454,11 +492,49 @@ def main():
         default=42,
         help="Random seed for reproducibility (default: 42)"
     )
+
+    # ---- Parallelism args ----
+    parser.add_argument(
+        "--num_gpus",
+        type=int,
+        default=1,
+        help="Total number of GPUs to use (default: 1)"
+    )
+    parser.add_argument(
+        "--tp_size",
+        type=int,
+        default=1,
+        help="Tensor parallelism size (default: 1)"
+    )
+    parser.add_argument(
+        "--sp_size",
+        type=int,
+        default=1,
+        help="Sequence parallelism size (default: 1, set >1 to enable SP)"
+    )
+    parser.add_argument(
+        "--hsdp_shard_dim",
+        type=int,
+        default=1,
+        help="FSDP shard dimension for HSDP (default: 1)"
+    )
+    parser.add_argument(
+        "--hsdp_replicate_dim",
+        type=int,
+        default=1,
+        help="HSDP replication dimension (default: 1)"
+    )
     
     args = parser.parse_args()
     
     # Load the pipeline
-    pipeline, fastvideo_args = load_pipeline()
+    pipeline, fastvideo_args = load_pipeline(
+        num_gpus=args.num_gpus,
+        tp_size=args.tp_size,
+        sp_size=args.sp_size,
+        hsdp_shard_dim=args.hsdp_shard_dim,
+        hsdp_replicate_dim=args.hsdp_replicate_dim,
+    )
     
     # Generate video if requested
     if args.generate:
@@ -468,6 +544,7 @@ def main():
             prompt=args.prompt,
             image_path=args.image,
             output_path=args.output,
+            action_path=args.action_path,
             height=args.height,
             width=args.width,
             num_frames=args.num_frames,
@@ -479,3 +556,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+# Single GPU:
+python playground.py --generate \
+    --prompt "A dragon flying to a tower" \
+    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
+    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --height 480 --width 832 \
+    --num_frames 81 --steps 40 \
+    --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot.log
+
+# 2-GPU sequence parallel:
+torchrun --nproc_per_node=2 playground.py --generate \
+    --num_gpus 2 --sp_size 2 --hsdp_shard_dim 2 --hsdp_replicate_dim 1 \
+    --prompt "A dragon flying to a tower" \
+    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
+    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --height 480 --width 832 \
+    --num_frames 81 --steps 40 \
+    --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot_sp2.log
+
+# 4-GPU HSDP (2-way FSDP shard x 2-way replication):
+torchrun --nproc_per_node=4 playground.py --generate \
+    --num_gpus 4 --sp_size 2 --hsdp_shard_dim 2 --hsdp_replicate_dim 2 \
+    --prompt "A dragon flying to a tower" \
+    --image "/home/builder/workspace/lingbot-world/examples/00/image.jpg" \
+    --action_path "/home/builder/workspace/lingbot-world/examples/00/" \
+    --height 480 --width 832 \
+    --num_frames 81 --steps 40 \
+    --guidance_scale 5.0 --seed 5 2>&1 | tee lingbot_hsdp4.log
+"""
