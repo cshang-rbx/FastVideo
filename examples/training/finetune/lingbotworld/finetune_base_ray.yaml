@@ -1,0 +1,73 @@
+# LingbotWorld finetuning config for Ray trainer.
+#
+# Keys map 1:1 to FastVideo CLI args (with underscores).
+# This is equivalent to the args in finetune_base.sh.
+#
+# Usage (Ray local):
+#   python -m trainer.ray_launcher \
+#       --ray_local \
+#       --trainer fastvideo.training.ray.trainer \
+#       --config examples/training/finetune/lingbotworld/finetune_base_ray.yaml \
+#       --num_gpus 8
+#
+# Usage (standalone torchrun):
+#   torchrun --nproc_per_node 8 \
+#       -m fastvideo.training.ray.trainer \
+#       --config examples/training/finetune/lingbotworld/finetune_base_ray.yaml
+
+# ── Pipeline ──
+pipeline: "lingbotworld"   # or "wan_t2v", "wan_i2v", or a fully qualified class path
+
+# ── Model ──
+model_path: "${MODEL_PATH}"
+pretrained_model_name_or_path: "${MODEL_PATH}"
+
+# ── Parallelism ──
+num_gpus: 8
+sp_size: 8
+tp_size: 1
+hsdp_replicate_dim: 1
+hsdp_shard_dim: 8
+
+# ── Dataset ──
+data_path: "data/crush-smol_processed_i2v/combined_parquet_dataset/"
+dataloader_num_workers: 1
+
+# ── Training ──
+tracker_project_name: "lingbotworld_base_finetune"
+output_dir: "checkpoints/lingbotworld_base_finetune"
+max_train_steps: 2000
+train_batch_size: 1
+train_sp_batch_size: 1
+gradient_accumulation_steps: 1
+num_latent_t: 8
+num_height: 480
+num_width: 832
+num_frames: 77
+enable_gradient_checkpointing_type: "full"
+
+# ── Optimizer ──
+learning_rate: 1e-5
+mixed_precision: "bf16"
+weight_only_checkpointing_steps: 1000
+training_state_checkpointing_steps: 1000
+weight_decay: 1e-4
+max_grad_norm: 1.0
+
+# ── Validation ──
+log_validation: true
+validation_dataset_file: "examples/training/finetune/lingbotworld/validation.json"
+validation_steps: 100
+validation_sampling_steps: "40"
+validation_guidance_scale: "6.0"
+
+# ── Misc ──
+inference_mode: false
+checkpoints_total_limit: 3
+training_cfg_rate: 0.1
+multi_phased_distill_schedule: "4000-1"
+not_apply_cfg_solver: true
+dit_precision: "fp32"
+num_euler_timesteps: 50
+ema_start_step: 0
+seed: 42
