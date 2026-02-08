@@ -4,7 +4,7 @@
 # This is equivalent to the args in finetune_base.sh.
 #
 # Usage (Ray local):
-#   python -m trainer.ray_launcher \
+#   python -m fastvideo.training.ray.launcher \
 #       --ray_local \
 #       --trainer fastvideo.training.ray.trainer \
 #       --config examples/training/finetune/lingbotworld/finetune_base_ray.yaml \
@@ -14,13 +14,18 @@
 #   torchrun --nproc_per_node 8 \
 #       -m fastvideo.training.ray.trainer \
 #       --config examples/training/finetune/lingbotworld/finetune_base_ray.yaml
+#
+# Environment variables used for path interpolation:
+#   MODEL_PATH — path to the pretrained model directory
+#   DATA_PATH  — path to the parquet dataset directory
+#   VALIDATION_DATASET_FILE — path to validation.json
 
 # ── Pipeline ──
 pipeline: "lingbotworld"   # or "wan_t2v", "wan_i2v", or a fully qualified class path
 
 # ── Model ──
-model_path: "${MODEL_PATH}"
-pretrained_model_name_or_path: "${MODEL_PATH}"
+model_path: "${oc.env:MODEL_PATH}"
+pretrained_model_name_or_path: "${oc.env:MODEL_PATH}"
 
 # ── Parallelism ──
 num_gpus: 8
@@ -30,7 +35,7 @@ hsdp_replicate_dim: 1
 hsdp_shard_dim: 8
 
 # ── Dataset ──
-data_path: "data/crush-smol_processed_i2v/combined_parquet_dataset/"
+data_path: "${oc.env:DATA_PATH,data/crush-smol_processed_i2v/combined_parquet_dataset/}"
 dataloader_num_workers: 1
 
 # ── Training ──
@@ -56,7 +61,7 @@ max_grad_norm: 1.0
 
 # ── Validation ──
 log_validation: true
-validation_dataset_file: "examples/training/finetune/lingbotworld/validation.json"
+validation_dataset_file: "${oc.env:VALIDATION_DATASET_FILE,examples/training/finetune/lingbotworld/validation.json}"
 validation_steps: 100
 validation_sampling_steps: "40"
 validation_guidance_scale: "6.0"
