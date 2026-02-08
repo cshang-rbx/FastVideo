@@ -11,13 +11,18 @@ fi
 
 # Download the model from S3
 MODEL_PATH=$FAST_DIR/fastvideo-lingbot-world-base-cam/
+DATA_DIR="data/crush-smol_processed_i2v/combined_parquet_dataset/"
 if [ ! -d "$MODEL_PATH" ]; then
   s5cmd cp s3://3dfm-videogen/models/fastvideo-lingbot-world-base-cam/\* $FAST_DIR/fastvideo-lingbot-world-base-cam/
 fi
 
+if [ ! -d "$FAST_DIR/combined_parquet_dataset/" ]; then
+  cp -r $DATA_DIR $FAST_DIR/combined_parquet_dataset/
+  $DATA_DIR=$FAST_DIR/combined_parquet_dataset/
+fi
+
 
 MODEL_PATH=$FAST_DIR/fastvideo-lingbot-world-base-cam/
-DATA_DIR="data/crush-smol_processed_i2v/combined_parquet_dataset/"
 VALIDATION_DATASET_FILE="$(dirname "$0")/validation.json"
 NUM_GPUS=8
 
