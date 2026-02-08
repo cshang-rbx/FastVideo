@@ -125,7 +125,9 @@ def launch_ray_local(
     num_gpus = available_gpus
     logger.info("Using %d local GPU(s) via Ray.", num_gpus)
 
+    logger.info("Loading config from: %s", config_file)
     cfg = load_config(config_file)
+    logger.info("Config loaded successfully. Keys: %s", list(cfg.keys())[:10])
 
     # Convert OmegaConf DictConfig to plain dict before Ray serialization.
     # This prevents fastvideo imports during deserialization (before CUDA is ready).

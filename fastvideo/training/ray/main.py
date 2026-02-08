@@ -93,6 +93,17 @@ def _get_active_hcas() -> str:
 def load_config(config_path: str):
     """Load an OmegaConf config with ``_base_`` inheritance support."""
     from omegaconf import OmegaConf
+    
+    # Resolve relative paths to absolute paths
+    config_path_obj = Path(config_path)
+    if not config_path_obj.is_absolute():
+        config_path_obj = (Path.cwd() / config_path_obj).resolve()
+    config_path = str(config_path_obj)
+    
+    logger.info("Loading config from: %s", config_path)
+    if not Path(config_path).exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    
     cfg = OmegaConf.load(config_path)
     if "_base_" in cfg:
         base_cfg = OmegaConf.load(Path(config_path).parent / cfg._base_)
@@ -160,7 +171,9 @@ def train_loop_per_worker(train_loop_config: dict) -> None:
     # to avoid triggering fastvideo imports during deserialization.
     from omegaconf import OmegaConf
     cfg_dict = train_loop_config["cfg"]
+    logger.info("Reconstructing config from dict. Keys: %s", list(cfg_dict.keys())[:10] if isinstance(cfg_dict, dict) else "Not a dict")
     cfg = OmegaConf.create(cfg_dict)
+    logger.info("Config reconstructed. Pipeline: %s", cfg.get("pipeline", "NOT SET"))
 
     # Dynamic import of the Trainer module (now safe, CUDA is initialized)
     trainer_module_path = train_loop_config["trainer_module"]
