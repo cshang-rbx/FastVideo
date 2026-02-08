@@ -43,13 +43,23 @@ Ray remote::
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
 
-from fastvideo.logger import init_logger
-
-logger = init_logger(__name__)
+# NOTE: Do NOT import from fastvideo at module level.  Ray workers
+# deserialise this module before CUDA is available, and
+# ``fastvideo/__init__.py`` eagerly imports Triton kernels that
+# require an active CUDA driver.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger(__name__)
 
 # FastVideo project root (3 levels up from this file)
 _FASTVIDEO_ROOT = Path(__file__).resolve().parents[3]

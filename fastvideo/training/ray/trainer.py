@@ -26,14 +26,25 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import logging
 import os
+import sys
 from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-from fastvideo.logger import init_logger
-
-logger = init_logger(__name__)
+# NOTE: Do NOT import from fastvideo at module level.  Ray workers
+# deserialise this module before CUDA is available, and
+# ``fastvideo/__init__.py`` eagerly imports Triton kernels that
+# require an active CUDA driver.  All fastvideo imports are deferred
+# to inside methods that run after CUDA is ready.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger(__name__)
 
 # Registry of pipeline short names → fully qualified class paths.
 # The ``pipeline`` key in the YAML config selects from this map.
@@ -59,6 +70,10 @@ def _resolve_pipeline_cls(pipeline_name: str) -> type:
 
     Accepts either a short name from ``PIPELINE_REGISTRY`` or a fully
     qualified class path (e.g. ``fastvideo.training.my_pipeline.MyPipeline``).
+
+    NOTE: This triggers fastvideo imports, so it must only be called
+    after CUDA is available (i.e. inside a worker, not during Ray
+    serialisation).
     """
     if pipeline_name in PIPELINE_REGISTRY:
         return _import_class(PIPELINE_REGISTRY[pipeline_name])
@@ -165,10 +180,11 @@ class Trainer:
         self.cfg = cfg
         self.use_ray = use_ray
         self.pipeline = None
+        self._pipeline_cls = None  # resolved lazily in _build_pipeline
 
-        # Resolve pipeline class early (fail fast on bad names)
-        pipeline_name = cfg.get("pipeline", "lingbotworld")
-        self._pipeline_cls = _resolve_pipeline_cls(pipeline_name)
+        # Store pipeline name for lazy resolution (avoid fastvideo imports
+        # at construction time — CUDA may not be available yet under Ray).
+        self._pipeline_name = cfg.get("pipeline", "lingbotworld")
 
         # Ensure inference_mode is off for training
         if "inference_mode" not in cfg:
@@ -176,13 +192,21 @@ class Trainer:
 
         logger.info(
             "Trainer initialized (pipeline=%s, use_ray=%s, num_gpus=%s)",
-            self._pipeline_cls.__name__,
+            self._pipeline_name,
             use_ray,
             cfg.get("num_gpus", "?"),
         )
 
     def _build_pipeline(self):
-        """Build the training pipeline from config."""
+        """Build the training pipeline from config.
+
+        This is where fastvideo modules are first imported, so CUDA must
+        be available by the time this method runs.
+        """
+        # Resolve pipeline class (triggers fastvideo imports)
+        self._pipeline_cls = _resolve_pipeline_cls(self._pipeline_name)
+        logger.info("Resolved pipeline class: %s", self._pipeline_cls.__name__)
+
         # Convert OmegaConf config → CLI argv → argparse.Namespace
         # This reuses FastVideo's existing argument parsing & validation.
         argv = _cfg_to_argv(self.cfg)
