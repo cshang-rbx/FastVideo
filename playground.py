@@ -204,7 +204,7 @@ def load_pipeline(
         pipeline_config=pipeline_config,
         # The model_index.json has _class_name="WanImageToVideoPipeline",
         # but we want the LingbotWorld pipeline which adds camera conditioning.
-        override_pipeline_cls_name="LingbotWorldI2VPipeline",
+        override_pipeline_cls_name="LingbotWorldPipeline",
     )
     
     # Build pipeline - this loads all modules

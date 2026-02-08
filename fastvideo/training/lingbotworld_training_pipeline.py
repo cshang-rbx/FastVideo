@@ -12,8 +12,8 @@ from fastvideo.fastvideo_args import FastVideoArgs, TrainingArgs
 from fastvideo.logger import init_logger
 from fastvideo.models.schedulers.scheduling_flow_unipc_multistep import (
     FlowUniPCMultistepScheduler)
-from fastvideo.pipelines.basic.lingbotworld.lingbotworld_i2v_pipeline import (
-    LingbotWorldI2VPipeline)
+from fastvideo.pipelines.basic.lingbotworld.lingbotworld_pipeline import (
+    LingbotWorldPipeline)
 from fastvideo.pipelines.pipeline_batch_info import ForwardBatch, TrainingBatch
 from fastvideo.training.training_pipeline import TrainingPipeline
 from fastvideo.utils import is_vsa_available, shallow_asdict
@@ -53,7 +53,7 @@ class LingbotWorldTrainingPipeline(TrainingPipeline):
         args_copy.inference_mode = True
         args_copy.dit_cpu_offload = True
 
-        self.validation_pipeline = LingbotWorldI2VPipeline.from_pretrained(
+        self.validation_pipeline = LingbotWorldPipeline.from_pretrained(
             training_args.model_path,
             args=None,
             inference_mode=True,

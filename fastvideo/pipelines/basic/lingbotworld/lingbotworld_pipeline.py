@@ -18,7 +18,7 @@ from fastvideo.pipelines.stages import (
 logger = init_logger(__name__)
 
 
-class LingbotWorldI2VPipeline(LoRAPipeline, ComposedPipelineBase):
+class LingbotWorldPipeline(LoRAPipeline, ComposedPipelineBase):
     """LingbotWorld camera-conditioned image-to-video pipeline.
 
     Stages:
@@ -103,4 +103,4 @@ class LingbotWorldI2VPipeline(LoRAPipeline, ComposedPipelineBase):
                        stage=DecodingStage(vae=self.get_module("vae")))
 
 
-EntryClass = LingbotWorldI2VPipeline
+EntryClass = LingbotWorldPipeline
