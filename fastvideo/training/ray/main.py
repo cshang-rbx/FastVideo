@@ -148,12 +148,25 @@ def train_loop_per_worker(train_loop_config: dict) -> None:
     else:
         logger.info("[Worker %s] No active HCAs found", os.uname().nodename)
 
-    # Dynamic import of the Trainer module
+    # Ensure CUDA is initialized before importing fastvideo modules.
+    # Ray Train should have initialized CUDA, but we verify here.
+    import torch
+    if torch.cuda.is_available():
+        local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        torch.cuda.set_device(local_rank % torch.cuda.device_count())
+
+    # Convert plain dict back to OmegaConf DictConfig (after CUDA is ready).
+    # The config was converted to a plain dict before Ray serialization
+    # to avoid triggering fastvideo imports during deserialization.
+    from omegaconf import OmegaConf
+    cfg_dict = train_loop_config["cfg"]
+    cfg = OmegaConf.create(cfg_dict)
+
+    # Dynamic import of the Trainer module (now safe, CUDA is initialized)
     trainer_module_path = train_loop_config["trainer_module"]
     trainer_module = importlib.import_module(trainer_module_path)
     trainer_cls = getattr(trainer_module, "Trainer")
 
-    cfg = train_loop_config["cfg"]
     trainer = trainer_cls(cfg, use_ray=True)
 
     try:
@@ -225,8 +238,15 @@ def ray_main(args: argparse.Namespace) -> None:
     )
     logger.info("Ray initialized: %s", ray.cluster_resources())
 
+    # Convert OmegaConf DictConfig to plain dict before Ray serialization.
+    # This prevents fastvideo imports during deserialization (before CUDA is ready).
+    # The dict will be converted back to DictConfig in train_loop_per_worker
+    # after CUDA is initialized.
+    from omegaconf import OmegaConf
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+
     train_loop_config = {
-        "cfg": cfg,
+        "cfg": cfg_dict,  # Plain dict, not DictConfig
         "trainer_module": args.trainer,
     }
 

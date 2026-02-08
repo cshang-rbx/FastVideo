@@ -127,8 +127,15 @@ def launch_ray_local(
 
     cfg = load_config(config_file)
 
+    # Convert OmegaConf DictConfig to plain dict before Ray serialization.
+    # This prevents fastvideo imports during deserialization (before CUDA is ready).
+    # The dict will be converted back to DictConfig in train_loop_per_worker
+    # after CUDA is initialized.
+    from omegaconf import OmegaConf
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+
     train_loop_config = {
-        "cfg": cfg,
+        "cfg": cfg_dict,  # Plain dict, not DictConfig
         "trainer_module": trainer_module,
     }
 
