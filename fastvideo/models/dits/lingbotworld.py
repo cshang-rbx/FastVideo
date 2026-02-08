@@ -156,7 +156,7 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
     1. Uses ``LingbotWorldTransformerBlock`` (with per-block camera injection).
     2. Adds model-level camera conditioning layers that project Plücker ray
        embeddings into the hidden dimension.
-    3. ``forward`` accepts an extra ``cam_plucker_emb`` tensor and propagates
+    3. ``forward`` accepts an extra ``c2ws_plucker_emb`` tensor and propagates
        the processed camera hidden states to every block.
     """
 
@@ -261,17 +261,17 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
     # ------------------------------------------------------------------
     def _process_camera_embedding(
         self,
-        cam_plucker_emb: torch.Tensor,
+        c2ws_plucker_emb: torch.Tensor,
     ) -> torch.Tensor:
         """Project raw Plücker rays and run through the camera MLP.
 
         Args:
-            cam_plucker_emb: ``[B, seq_len, cam_in_dim]`` already patchified.
+            c2ws_plucker_emb: ``[B, seq_len, cam_in_dim]`` already patchified.
 
         Returns:
             Camera hidden states ``[B, seq_len, inner_dim]``.
         """
-        emb, _ = self.cam_plucker_proj(cam_plucker_emb)
+        emb, _ = self.cam_plucker_proj(c2ws_plucker_emb)
         h, _ = self.cam_hidden_layer1(emb)
         h = F.silu(h)
         h, _ = self.cam_hidden_layer2(h)
@@ -284,7 +284,7 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
         encoder_hidden_states: torch.Tensor | list[torch.Tensor],
         timestep: torch.LongTensor,
         encoder_hidden_states_image: torch.Tensor | list[torch.Tensor] | None = None,
-        cam_plucker_emb: torch.Tensor | None = None,
+        c2ws_plucker_emb: torch.Tensor | None = None,
         guidance=None,
         **kwargs,
     ) -> torch.Tensor:
@@ -292,7 +292,7 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
 
         Extra arg compared to ``WanTransformer3DModel.forward``:
 
-        * ``cam_plucker_emb`` – Plücker-ray embeddings, shape
+        * ``c2ws_plucker_emb`` – Plücker-ray embeddings, shape
           ``[B, 6, F, H, W]`` (6 channels, at the full latent resolution
           *before* patching).  If ``None`` the model behaves identically to
           the base Wan model.
@@ -348,14 +348,14 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
 
         # Process camera embedding (patchify + MLP) if provided
         cam_hidden_states = None
-        if cam_plucker_emb is not None:
-            # cam_plucker_emb: [B, 6, F, H, W] or already patchified
-            if cam_plucker_emb.dim() == 5:
+        if c2ws_plucker_emb is not None:
+            # c2ws_plucker_emb: [B, 6, F, H, W] or already patchified
+            if c2ws_plucker_emb.dim() == 5:
                 # Patchify: rearrange to [B, (F'*H'*W'), (6*cam_dim*p_t*p_h*p_w)]
-                B, C_cam, F_cam, H_cam, W_cam = cam_plucker_emb.shape
+                B, C_cam, F_cam, H_cam, W_cam = c2ws_plucker_emb.shape
                 cam_dim = C_cam  # 6
                 # Reshape into patches
-                cam = cam_plucker_emb.reshape(
+                cam = c2ws_plucker_emb.reshape(
                     B, cam_dim,
                     post_patch_num_frames, p_t,
                     post_patch_height, p_h,
@@ -368,7 +368,7 @@ class LingbotWorldTransformer3DModel(WanTransformer3DModel):
                     cam_dim * p_t * p_h * p_w,
                 )
             else:
-                cam = cam_plucker_emb
+                cam = c2ws_plucker_emb
 
             # cam: [B, seq_len, cam_in_dim]  – but cam_in_dim is 6*p_t*p_h*p_w
             # need to match cam_plucker_proj input: 6 * 64 * prod(patch_size)

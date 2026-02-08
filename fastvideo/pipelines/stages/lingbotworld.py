@@ -6,11 +6,11 @@ This module provides:
 
 * :class:`CameraConditioningStage` – computes Plücker-ray camera embeddings
   from pose / intrinsic files (or accepts a pre-computed tensor) and stores
-  the result in ``batch.extra["cam_plucker_emb"]``.
+  the result in ``batch.extra["c2ws_plucker_emb"]``.
 
 * :class:`LingbotWorldDenoisingStage` – extends the standard
   :class:`~fastvideo.pipelines.stages.denoising.DenoisingStage` to inject
-  ``cam_plucker_emb`` into every transformer forward call.
+  ``c2ws_plucker_emb`` into every transformer forward call.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from fastvideo.distributed import get_local_torch_device
 from fastvideo.fastvideo_args import FastVideoArgs
 from fastvideo.logger import init_logger
 from fastvideo.pipelines.stages.lingbotworld_utils import (
-    compute_cam_plucker_emb)
+    compute_c2ws_plucker_emb)
 from fastvideo.pipelines.pipeline_batch_info import ForwardBatch
 from fastvideo.pipelines.stages.base import PipelineStage
 from fastvideo.pipelines.stages.denoising import DenoisingStage
@@ -42,7 +42,7 @@ class CameraConditioningStage(PipelineStage):
     """Compute Plücker-ray camera embeddings and store in ``batch.extra``.
 
     This stage reads camera data from ``batch.extra`` and produces
-    ``batch.extra["cam_plucker_emb"]`` — a ``[1, C, F_lat, H_lat, W_lat]``
+    ``batch.extra["c2ws_plucker_emb"]`` — a ``[1, C, F_lat, H_lat, W_lat]``
     tensor that will be forwarded to the LingbotWorld transformer.
 
     Expected ``batch.extra`` keys (one of the two options):
@@ -54,7 +54,7 @@ class CameraConditioningStage(PipelineStage):
         - ``"original_width"`` (int, optional, default 832)
 
     * **Option B** – pre-computed tensor:
-        - ``"cam_plucker_emb"`` (torch.Tensor): already computed.
+        - ``"c2ws_plucker_emb"`` (torch.Tensor): already computed.
     """
 
     def __init__(self, vae_stride: tuple[int, int, int],
@@ -69,8 +69,8 @@ class CameraConditioningStage(PipelineStage):
         fastvideo_args: FastVideoArgs,
     ) -> ForwardBatch:
         # If already pre-computed, nothing to do
-        if batch.extra.get("cam_plucker_emb") is not None:
-            logger.info("Using pre-computed cam_plucker_emb from batch.extra")
+        if batch.extra.get("c2ws_plucker_emb") is not None:
+            logger.info("Using pre-computed c2ws_plucker_emb from batch.extra")
             return batch
 
         poses_path = batch.extra.get("poses_path")
@@ -79,7 +79,7 @@ class CameraConditioningStage(PipelineStage):
         if poses_path is None or intrinsics_path is None:
             logger.warning(
                 "No camera data provided (poses_path / intrinsics_path / "
-                "cam_plucker_emb). Running without camera conditioning.")
+                "c2ws_plucker_emb). Running without camera conditioning.")
             return batch
 
         num_frames = batch.num_frames
@@ -97,7 +97,7 @@ class CameraConditioningStage(PipelineStage):
 
         device = get_local_torch_device()
 
-        cam_plucker_emb = compute_cam_plucker_emb(
+        c2ws_plucker_emb = compute_c2ws_plucker_emb(
             poses_path=poses_path,
             intrinsics_path=intrinsics_path,
             num_frames=num_frames,
@@ -111,10 +111,10 @@ class CameraConditioningStage(PipelineStage):
             original_width=original_width,
         )
 
-        batch.extra["cam_plucker_emb"] = cam_plucker_emb
+        batch.extra["c2ws_plucker_emb"] = c2ws_plucker_emb
         logger.info(
-            "Computed cam_plucker_emb from files: shape=%s",
-            cam_plucker_emb.shape,
+            "Computed c2ws_plucker_emb from files: shape=%s",
+            c2ws_plucker_emb.shape,
         )
         return batch
 
@@ -133,10 +133,10 @@ class CameraConditioningStage(PipelineStage):
 
 
 class LingbotWorldDenoisingStage(DenoisingStage):
-    """Denoising stage that passes ``cam_plucker_emb`` to the transformer.
+    """Denoising stage that passes ``c2ws_plucker_emb`` to the transformer.
 
     Extends the standard :class:`DenoisingStage` to also inject the Plücker-ray
-    camera embeddings stored in ``batch.extra["cam_plucker_emb"]`` into every
+    camera embeddings stored in ``batch.extra["c2ws_plucker_emb"]`` into every
     transformer forward call.  The base denoising logic (CFG, boundary ratio
     for Wan2.2 dual-expert, STA, etc.) is fully preserved.
     """
@@ -146,14 +146,14 @@ class LingbotWorldDenoisingStage(DenoisingStage):
         batch: ForwardBatch,
         fastvideo_args: FastVideoArgs,
     ) -> ForwardBatch:
-        cam_plucker_emb = batch.extra.get("cam_plucker_emb", None)
+        c2ws_plucker_emb = batch.extra.get("c2ws_plucker_emb", None)
 
-        if cam_plucker_emb is None:
+        if c2ws_plucker_emb is None:
             # No camera conditioning — fall back to standard Wan denoising.
             return super().forward(batch, fastvideo_args)
 
         # Temporarily wrap the transformer(s) so that every call receives
-        # cam_plucker_emb as an extra keyword argument.  We use
+        # c2ws_plucker_emb as an extra keyword argument.  We use
         # functools.wraps so that inspect.signature still returns the
         # *original* signature (required by prepare_extra_func_kwargs in
         # the parent class).
@@ -172,10 +172,10 @@ class LingbotWorldDenoisingStage(DenoisingStage):
             def _patched(
                 *args,
                 _orig_fn=orig,
-                _emb=cam_plucker_emb,
+                _emb=c2ws_plucker_emb,
                 **kwargs,
             ):
-                kwargs.setdefault("cam_plucker_emb", _emb)
+                kwargs.setdefault("c2ws_plucker_emb", _emb)
                 return _orig_fn(*args, **kwargs)
 
             originals.append(orig)

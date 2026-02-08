@@ -218,7 +218,7 @@ def run_dummy_forward(checkpoint_dir: str | None = None):
     logger.info("Input shapes:")
     logger.info("  hidden_states: %s", hidden_states.shape)
     logger.info("  encoder_hidden_states: %s", encoder_hidden_states.shape)
-    logger.info("  cam_plucker_emb: %s", cam_plucker.shape)
+    logger.info("  c2ws_plucker_emb: %s", cam_plucker.shape)
 
     with torch.no_grad():
         with set_forward_context(
@@ -230,7 +230,7 @@ def run_dummy_forward(checkpoint_dir: str | None = None):
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 timestep=timestep,
-                cam_plucker_emb=cam_plucker,
+                c2ws_plucker_emb=cam_plucker,
             )
 
     logger.info("✓ Forward pass succeeded!")
@@ -249,7 +249,7 @@ def run_dummy_forward(checkpoint_dir: str | None = None):
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 timestep=timestep,
-                cam_plucker_emb=None,
+                c2ws_plucker_emb=None,
             )
     logger.info("✓ Forward pass without camera also succeeded!")
     logger.info("  Output shape: %s", output_no_cam.shape)

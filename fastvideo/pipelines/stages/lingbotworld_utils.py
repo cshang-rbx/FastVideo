@@ -5,7 +5,7 @@ Camera utility functions for LingbotWorld Plücker-ray conditioning.
 This module provides standalone helpers to compute Plücker-ray camera embeddings
 from camera pose files (``poses.npy``) and intrinsic files (``intrinsics.npy``).
 
-The main entry point is :func:`compute_cam_plucker_emb`.
+The main entry point is :func:`compute_c2ws_plucker_emb`.
 """
 
 from __future__ import annotations
@@ -201,7 +201,7 @@ def get_Ks_transformed(
 # =========================================================================
 
 
-def compute_cam_plucker_emb(
+def compute_c2ws_plucker_emb(
     poses_path: str,
     intrinsics_path: str,
     num_frames: int,
@@ -238,7 +238,7 @@ def compute_cam_plucker_emb(
         original_width: Width the intrinsics were calibrated for.
 
     Returns:
-        ``cam_plucker_emb`` — shape ``[1, C, F_lat, H_lat, W_lat]`` where
+        ``c2ws_plucker_emb`` — shape ``[1, C, F_lat, H_lat, W_lat]`` where
         ``C = 6 * stride_h * stride_w``.
     """
     # --- Load & truncate poses to 4n+1 boundary -------------------------

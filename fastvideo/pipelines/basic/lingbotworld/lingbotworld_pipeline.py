@@ -65,7 +65,7 @@ class LingbotWorldPipeline(LoRAPipeline, ComposedPipelineBase):
                     image_processor=self.get_module("image_processor"),
                 ))
 
-        # Camera conditioning — computes cam_plucker_emb from poses/intrinsics
+        # Camera conditioning — computes c2ws_plucker_emb from poses/intrinsics
         vae_arch = fastvideo_args.pipeline_config.vae_config.arch_config
         vae_stride = (vae_arch.scale_factor_temporal,
                       vae_arch.scale_factor_spatial,
