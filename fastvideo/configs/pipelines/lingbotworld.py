@@ -15,7 +15,7 @@ from fastvideo.configs.pipelines.wan import Wan2_2_I2V_A14B_Config
 class LingbotWorldT2VBaseConfig(Wan2_2_I2V_A14B_Config):
     """Base configuration for LingbotWorld T2V Base pipeline architecture."""
     flow_shift: float | None = 10.0
-    boundary_ratio: float | None = 0.900
+    boundary_ratio: float | None = 0.947
 
     # DiT
     dit_config: DiTConfig = field(default_factory=LingbotWorldConfig)
